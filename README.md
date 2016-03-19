@@ -16,3 +16,4 @@ These modifications will allow you to use the Decred cgminer v0.0.5 with a ztex-
 Note: This miner only works on Getwork pools.  It does not have the Stratum logic incorporated yet.
 
 Issue: This miner seems to work fine for up to 4 ztex boards.  More than 4 boards is causing the cgminer to crash after 10 minutes.
+ 
