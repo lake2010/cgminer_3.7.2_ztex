@@ -1,6 +1,6 @@
-# cgminer 3.7.2 DCR Mods For ZTEX-15y1 FPGA
+# cgminer 3.7.2 DCR Mods For ZTEX-1.15y1 FPGA
 
-These modifications will allow you to use the Decred cgminer v0.0.5 with a ztex-15y1 fpga.  Below are the steps I used to get the miner running on my Raspberry Pi.
+These modifications will allow you to use the Decred cgminer v0.0.5 with a ztex-1.15y1 fpga.  Below are the steps I used to get the miner running on my Raspberry Pi.
 <ul>
 <li>sudo apt-get update</li>
 <li>sudo apt-get install libusb-1.0-0-dev libusb-1.0-0 libcurl4-openssl-dev libncurses5-dev libudev-dev screen libtool automake pkg-config libjansson-dev</li>
