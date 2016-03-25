@@ -686,7 +686,7 @@ int libztex_prepare_device(struct libusb_device *dev, struct libztex_device** zt
 	newdev->hashesPerClock = buf[0] > 2? (((buf[8] & 255) | ((buf[9] & 255) << 8)) + 1) / 128.0: 1.0;
 	newdev->extraSolutions = buf[0] > 4? buf[10]: 0;
 
-	applog(LOG_DEBUG, "PID: %d numNonces: %d offsNonces: %d freqM1: %f freqMaxM: %d freqM: %d suspendSupported: %s hashesPerClock: %f extraSolutions: %d",
+	applog(LOG_WARNING, "PID: %d numNonces: %d offsNonces: %d freqM1: %f freqMaxM: %d freqM: %d suspendSupported: %s hashesPerClock: %f extraSolutions: %d",
 	                 buf[0], newdev->numNonces, newdev->offsNonces, newdev->freqM1, newdev->freqMaxM, newdev->freqM, newdev->suspendSupported ? "T": "F", 
 	                 newdev->hashesPerClock, newdev->extraSolutions);
 
@@ -828,11 +828,13 @@ done:
 
 int libztex_sendHashData(struct libztex_device *ztex, unsigned char *sendbuf)
 {
-	int cnt = 0, ret, len;
+	int cnt = 0;
+	int ret = 48;	// Set This To Number Of Bytes To Be Sent To FPGA
+	int len = 0;
 
 	if (ztex == NULL || ztex->hndl == NULL)
 		return 0;
-	ret = 48; len = 0;
+
 	while (ret > 0) {
 		cnt = libusb_control_transfer(ztex->hndl, 0x40, 0x80, 0, 0, sendbuf + len, ret, 1000);
 		if (cnt >= 0) {
@@ -847,21 +849,15 @@ int libztex_sendHashData(struct libztex_device *ztex, unsigned char *sendbuf)
 	return cnt;
 }
 
-int libztex_readHashData(struct libztex_device *ztex, struct libztex_hash_data nonces[])
+int libztex_readHashData(struct libztex_device *ztex, struct libztex_hash_data *nonces)
 {
-	int bufsize = 12 + ztex->extraSolutions * 4;
-	int cnt = 0, i, j, ret, len;
-	unsigned char *rbuf;
+	unsigned char rbuf[16];		// Stores GN1, Nonce, Hash, GN2
+	int ret = 16;
+	int cnt = 0, len = 0;
 
 	if (ztex->hndl == NULL)
 		return 0;
 
-	rbuf = malloc(sizeof(unsigned char) * (ztex->numNonces * bufsize));
-	if (rbuf == NULL) {
-		applog(LOG_ERR, "%s: Failed to allocate memory for reading nonces", ztex->repr);
-		return 0;
-	}
-	ret = bufsize * ztex->numNonces; len = 0;
 	while (ret > 0) {
 		cnt = libusb_control_transfer(ztex->hndl, 0xc0, 0x81, 0, 0, rbuf + len, ret, 1000);
 		if (cnt >= 0) {
@@ -873,45 +869,21 @@ int libztex_readHashData(struct libztex_device *ztex, struct libztex_hash_data n
 
 	if (unlikely(cnt < 0)) {
 		applog(LOG_ERR, "%s: Failed readHashData with err %d", ztex->repr, cnt);
-		free(rbuf);
 		return cnt;
 	}
 
-	for (i=0; i<ztex->numNonces; i++) {
-		memcpy((char*)&nonces[i].goldenNonce[0], &rbuf[i*bufsize], 4);
-		nonces[i].goldenNonce[0] -= ztex->offsNonces;
-		//applog(LOG_DEBUG, "W %d:0 %0.8x", i, nonces[i].goldenNonce[0]);
+	memcpy((char*)&nonces->goldenNonce[0], &rbuf[0], 4);
+	memcpy((char*)&nonces->nonce,          &rbuf[4], 4);
+	memcpy((char*)&nonces->hash7,          &rbuf[8], 4);
+	memcpy((char*)&nonces->goldenNonce[1], &rbuf[12], 4);
 
-		memcpy((char*)&nonces[i].nonce, &rbuf[(i*bufsize)+4], 4);
-		memcpy((char*)&nonces[i].hash7, &rbuf[(i*bufsize)+8], 4);
+	nonces->nonce = htole32(nonces->nonce);
+	nonces->hash7 = htole32(nonces->hash7);
+	nonces->goldenNonce[0] = htole32(nonces->goldenNonce[0]);
+	nonces->goldenNonce[1] = htole32(nonces->goldenNonce[0]);
 
-		nonces[i].nonce = htole32(nonces[i].nonce);
-		nonces[i].hash7 = htole32(nonces[i].hash7);
-
-		
-//
-//
-//
-//		applog(LOG_WARNING, "N %d:0 %0.8x", i, nonces[i].nonce);
-//		applog(LOG_WARNING, "G %d:0 %0.8x", i, nonces[i].goldenNonce[0]);
-//		applog(LOG_WARNING, "H %d:0 %0.8x", i, nonces[i].hash7);
-//
-//
-//
-		
-		
-
-		nonces[i].nonce -= ztex->offsNonces;
-
-		for (j=0; j<ztex->extraSolutions; j++) {
-			memcpy((char*)&nonces[i].goldenNonce[j+1], &rbuf[(i*bufsize)+12+(j*4)], 4);
-			nonces[i].goldenNonce[j+1] = htole32(nonces[i].goldenNonce[j+1]);
-			nonces[i].goldenNonce[j+1] -= ztex->offsNonces;
-			//applog(LOG_DEBUG, "W %d:%d %0.8x", i, j+1, nonces[i].goldenNonce[j+1]);
-		}
-	}
-
-	free(rbuf);
+	applog(LOG_DEBUG, "%s: GN1: %08X, N: %08X, H: %08X, GN2: %08X", ztex->repr, nonces->goldenNonce[0], nonces->nonce, nonces->hash7, nonces->goldenNonce[1]);
+	
 	return cnt;
 }
 
