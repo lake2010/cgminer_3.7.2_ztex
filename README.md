@@ -1,4 +1,4 @@
-# cgminer 3.7.2 DCR Mods For ZTEX-1.15y1 FPGA
+# cgminer 3.7.2 DCR Mods For ZTEX-1.15y FPGA
 
 These modifications will allow you to use the Decred cgminer v0.0.5 with a ztex-1.15y1 fpga.  Below are the steps I used to get the miner running on my Raspberry Pi.
 <ul>
@@ -15,9 +15,7 @@ These modifications will allow you to use the Decred cgminer v0.0.5 with a ztex-
 </ul>
 Note: This miner only works on Getwork pools.  It does not have the Stratum logic incorporated yet.
 
-<b>Issue: This miner seems to work fine for up to 4 ztex boards.  More than 4 boards is causing the cgminer to crash after 10 minutes.</b>
-
-The following link is for a ztex-1.15y1 DCR bistream, it gets about 800Mh/s.
+The following link is for a ztex-1.15y DCR bistream, it gets about 800Mh/s.
 
 <ul>https://www.dropbox.com/s/j1d12ixhfthj0y7/ztex_ufm1_15y1.bit?dl=0</ul>
 ________________________________________________________________________________________________
