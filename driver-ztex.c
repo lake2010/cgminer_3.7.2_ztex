@@ -29,13 +29,10 @@
 #include "libztex.h"
 #include "util.h"
 
-#define GOLDEN_BACKLOG 5
-
 struct device_drv ztex_drv;
 
-static int option_offset = -1;		// KRAMBLE used for ztex_clock option
+static int option_offset = -1;
 
-// Forward declarations
 static void ztex_disable(struct thr_info* thr);
 static bool ztex_prepare(struct thr_info *thr);
 extern uint32_t ztex_checkNonce(struct work *work, uint32_t nonce);
@@ -73,8 +70,6 @@ static void ztex_releaseFpga(struct libztex_device* ztex)
 	}
 }
 
-
-//static void ztex_detect(void)
 static void ztex_detect(bool __maybe_unused hotplug)
 {
 	int cnt;
@@ -170,17 +165,17 @@ static bool ztex_updateFreq(struct libztex_device* ztex)
 static int64_t ztex_scanwork(struct thr_info *thr)
 {
 	struct libztex_device *ztex;
+	struct libztex_hash_data hdata;
 	unsigned char sendbuf[48];
-	int i, j, k, l;
-	uint32_t *backlog;
-	int backlog_p = 0, backlog_max;
-	uint32_t *lastnonce;
-	uint32_t nonce, noncecnt = 0;
-	bool overflow, found;
-	struct libztex_hash_data hdata[GOLDEN_BACKLOG];
+	int count, validNonces, errorCount;
+	int i, rc;
+	uint32_t nonce, hash_count;
+	uint32_t golden_nonce1, golden_nonce2;
+	uint32_t last_nonce, last_golden1, last_golden2;
+	bool overflow;
 	uint32_t * sb;
 	sb = (uint32_t *)sendbuf;
-
+	
 	struct work *work;
 	work = get_work(thr, thr->id);
 	
@@ -204,26 +199,25 @@ static int64_t ztex_scanwork(struct thr_info *thr)
 	calc_midstate(work);
 	swap256(sendbuf + 16, work->midstate);
 
-	// Sendy Bytes To FPGA In Reverse Order
+	// Send Bytes To FPGA In Reverse Order
 	unsigned char swap[48];
-	for (l=0; l<48; l++) {
-		swap[l] = sendbuf[47 - l];
+	for (i=0; i<48; i++) {
+		swap[i] = sendbuf[47 - i];
 	}
 
 //unsigned char* b = (unsigned char*)(swap);
 //applog(LOG_WARNING, "%s Swp: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", ztex->repr, b[0],b[1],b[2],b[3],b[4],b[5],b[6],b[7],b[8],b[9],b[10],b[11],b[12],b[13],b[14],b[15],b[16],b[17],b[18],b[19],b[20],b[21],b[22],b[23],b[24],b[25],b[26],b[27],b[28],b[29],b[30],b[31],b[32],b[33],b[34],b[35],b[36],b[37],b[38],b[39],b[40],b[41],b[42],b[43],b[44],b[45],b[46],b[47]);
 
+
+	// Send Work To FPGA
 	ztex_selectFpga(ztex);
-	i = libztex_sendHashData(ztex, sendbuf);
-	if (i < 0) {
-		// Something wrong happened in send
-		applog(LOG_ERR, "%s: Failed to send hash data with err %d, retrying", ztex->repr, i);
+	rc = libztex_sendHashData(ztex, sendbuf);
+	if (rc < 0) {
+		applog(LOG_ERR, "%s: Failed to send hash data with err %d, retrying", ztex->repr, rc);
 		cgsleep_ms(500);
-		i = libztex_sendHashData(ztex, sendbuf);
-		if (i < 0) {
-			// And there's nothing we can do about it
+		rc = libztex_sendHashData(ztex, sendbuf);
+		if (rc < 0) {
 			ztex_disable(thr);
-			applog(LOG_ERR, "%s: Failed to send hash data with err %d, giving up", ztex->repr, i);
 			ztex_releaseFpga(ztex);
 			return -1;
 		}
@@ -231,26 +225,15 @@ static int64_t ztex_scanwork(struct thr_info *thr)
 	ztex_releaseFpga(ztex);
 
 	applog(LOG_DEBUG, "%s: sent hashdata", ztex->repr);
-
-	lastnonce = calloc(1, sizeof(uint32_t)*ztex->numNonces);
-	if (lastnonce == NULL) {
-		applog(LOG_ERR, "%s: failed to allocate lastnonce[%d]", ztex->repr, ztex->numNonces);
-		return -1;
-	}
-
-	/* Add an extra slot for detecting dupes that lie around */
-	backlog_max = ztex->numNonces * (2 + ztex->extraSolutions);
-	backlog = calloc(1, sizeof(uint32_t) * backlog_max);
-	if (backlog == NULL) {
-		applog(LOG_ERR, "%s: failed to allocate backlog[%d]", ztex->repr, backlog_max);
-		return -1;
-	}
-
+	
 	overflow = false;
-	int count = 0;
-	int delay = 0;
-	int validNonces = 0;
-	double errorCount = 0;
+	last_golden1 = 0;
+	last_golden2 = 0;
+	last_nonce = 0;
+	count = 0;
+	validNonces = 0;
+	hash_count = 0;
+	errorCount = 0;
 
 	applog(LOG_DEBUG, "%s: entering poll loop", ztex->repr);
 	while (!(overflow || thr->work_restart)) {
@@ -262,30 +245,22 @@ static int64_t ztex_scanwork(struct thr_info *thr)
 			sleepcount += 1;
 		}
 
-		if (thr->work_restart) {
-			applog(LOG_DEBUG, "%s: New work detected", ztex->repr);
-			break;
-		}
-
+		// Read Results From FPGA
 		ztex_selectFpga(ztex);
-		i = libztex_readHashData(ztex, &hdata[0]);
-		if (i < 0) {
-			// Something wrong happened in read
-			applog(LOG_ERR, "%s: Failed to read hash data with err %d, retrying", ztex->repr, i);
+		rc = libztex_readHashData(ztex, &hdata);
+		if (rc < 0) {
+			applog(LOG_ERR, "%s: Failed to read hash data with err %d, retrying", ztex->repr, rc);
 			cgsleep_ms(500);
-			i = libztex_readHashData(ztex, &hdata[0]);
-			if (i < 0) {
-				// And there's nothing we can do about it
+			rc = libztex_readHashData(ztex, &hdata);
+			if (rc < 0) {
 				ztex_disable(thr);
-				applog(LOG_ERR, "%s: Failed to read hash data with err %d, giving up", ztex->repr, i);
-				free(lastnonce);
-				free(backlog);
 				ztex_releaseFpga(ztex);
 				return -1;
 			}
 		}
 		ztex_releaseFpga(ztex);
 
+		// Check If New Work Is Available
 		if (thr->work_restart) {
 			applog(LOG_DEBUG, "%s: New work detected", ztex->repr);
 			break;
@@ -294,127 +269,80 @@ static int64_t ztex_scanwork(struct thr_info *thr)
 		ztex->errorCount[ztex->freqM] *= 0.995;
 		ztex->errorWeight[ztex->freqM] = ztex->errorWeight[ztex->freqM] * 0.995 + 1.0;
 
-		for (i = 0; i < ztex->numNonces; i++) {
-			nonce = hdata[i].nonce;
+		nonce = hdata.nonce;
 
-			// Get rid of FPGA noise
-			if ((nonce == 0x00000000) || (nonce == hdata->hash7)) {
-				continue;
+		// Get Rid of FPGA Noise
+		if ((nonce == 0x00000000) || (nonce == hdata.hash7)) {
+			continue;
+		}
+
+		// Check For Hardware Errors On The FPGA
+		if (ztex_checkNonce(work, nonce) != (hdata.hash7)) {
+			if (count > 2) {	// Only Count Errors After The First 500ms Of Work Being Sent To FPGA
+				thr->cgpu->hw_errors++;
+				errorCount += 1;
+				applog(LOG_WARNING, "%s: Check Nonce Failed - %08X", ztex->repr, nonce);
 			}
+			continue;
+		}
+
+		// Check If FPGA Has Processed All Nonces For The Work
+		if ( nonce < last_nonce ) {
+			applog(LOG_DEBUG, "%s: Overflow - Nonce=%08x, Last=%08x", ztex->repr, nonce, last_nonce);
+			overflow = true;
+			continue;
+		}
+		else
+			last_nonce = nonce;
+
+		hash_count = nonce;
+		validNonces++;
+
+		//
+		// Golden Nonce 1 Check
+		//
+		golden_nonce1 = hdata.goldenNonce[0];
+		
+		if ((golden_nonce1 != 0) && (golden_nonce1 != last_golden1) && (golden_nonce1 != last_golden2)) {
+
+			last_golden2 = last_golden1;
+			last_golden1 = golden_nonce1;
 			
-			if (nonce > noncecnt)
-				noncecnt = nonce;
-			if ( (((0xffffffff - nonce) < (nonce - lastnonce[i])) || nonce < lastnonce[i]) && nonce ) {
-				applog(LOG_DEBUG, "%s: overflow nonce=%08x lastnonce=%08x", ztex->repr, nonce, lastnonce[i]);
-				overflow = true;
-			} else
-				lastnonce[i] = nonce;
+			applog(LOG_DEBUG, "%s: Submitted Nonce %08x", ztex->repr, golden_nonce1);
+			submit_nonce(thr, work, golden_nonce1);
+		}
 
+		//
+		// Golden Nonce 2 Check
+		//
+		golden_nonce2 = hdata.goldenNonce[1];
+
+		if ((golden_nonce2 != 0) && (golden_nonce2 != last_golden1) && (golden_nonce2 != last_golden2)) {
+
+			last_golden2 = last_golden1;
+			last_golden1 = golden_nonce2;
 			
-			// Check For Hardware Error Once Every 10 Data Reads From FGPA
-			delay += 1;
-			if(delay == 10) {
-				delay = 0;
-
-//				applog(LOG_WARNING, "%s N: %08X, H: %08X, E: %08X", ztex->repr, nonce, hdata->hash7, ztex_checkNonce(work, nonce));
-
-				if (ztex_checkNonce(work, nonce) != (hdata->hash7)) {
-//						applog(LOG_DEBUG, "%s: checkNonce failed for %08X", ztex->repr, nonce);
-
-					// do not count errors in the first 500ms after sendHashData (2x250 wait time)
-					if (count > 2) {
-						thr->cgpu->hw_errors++;
-						errorCount += (1.0 / ztex->numNonces);
-					}
-					validNonces--;
-				}
-			}
-
-			validNonces++;
-			
-			for (j=0; j<=ztex->extraSolutions; j++) {
-				nonce = hdata[i].goldenNonce[j];
-
-				if ((nonce == 0x00000000) || (nonce == 0x04040404)) {
-					continue;
-				}
-				
-				if (nonce == ztex->offsNonces) {
-					continue;
-				}
-
-				// precheck the extraSolutions since they often fail
-				if (j > 0 && ztex_checkNonce(work, nonce) != 0) {
-					continue;
-				}
-
-				found = false;
-				for (k = 0; k < backlog_max; k++) {
-					if (backlog[k] == nonce) {
-						found = true;
-						break;
-					}
-				}
-				if (!found) {
-					applog(LOG_DEBUG, "%s: Share found N%dE%d", ztex->repr, i, j);
-					backlog[backlog_p++] = nonce;
-
-					if (backlog_p >= backlog_max)
-						backlog_p = 0;
-
-					work->blk.nonce = 0xffffffff;
-					applog(LOG_DEBUG, "%s: submitted %08x", ztex->repr, nonce);
-					submit_nonce(thr, work, nonce);
-				}
-			}
+			applog(LOG_DEBUG, "%s: Submitted Nonce %08x", ztex->repr, golden_nonce2);
+			submit_nonce(thr, work, golden_nonce2);
 		}
 	}
 
-	// only add the errorCount if we had at least some valid nonces or
-	// had no valid nonces in the last round
-	if (errorCount > 0.0) {
-		if (ztex->nonceCheckValid > 0 && validNonces == 0) {
-			applog(LOG_ERR, "%s: resetting %.1f errors", ztex->repr, errorCount);
-		}
-		else {
-			ztex->errorCount[ztex->freqM] += errorCount;
-		}
-	}
-
-	// remember the number of valid nonces for the check in the next round
 	ztex->nonceCheckValid = validNonces;
+	ztex->errorCount[ztex->freqM] += errorCount;
+	ztex->errorRate[ztex->freqM] = ztex->errorCount[ztex->freqM] / ztex->errorWeight[ztex->freqM] * (ztex->errorWeight[ztex->freqM] < 100 ? ztex->errorWeight[ztex->freqM] * 0.01 : 1.0);
 
-	ztex->errorRate[ztex->freqM] = ztex->errorCount[ztex->freqM] /	ztex->errorWeight[ztex->freqM] * (ztex->errorWeight[ztex->freqM] < 100? ztex->errorWeight[ztex->freqM] * 0.01: 1.0);
 	if (ztex->errorRate[ztex->freqM] > ztex->maxErrorRate[ztex->freqM])
 		ztex->maxErrorRate[ztex->freqM] = ztex->errorRate[ztex->freqM];
 
 	if (!ztex_updateFreq(ztex)) {
-		// Something really serious happened, so mark this thread as dead!
-		free(lastnonce);
-		free(backlog);
-		
 		return -1;
 	}
 
-	applog(LOG_DEBUG, "%s: exit %1.8X", ztex->repr, noncecnt);
+	applog(LOG_DEBUG, "%s: Exit %1.8X", ztex->repr, hash_count);
 
-	work->blk.nonce = 0xffffffff;
-
-	free(lastnonce);
-	free(backlog);
-
-	return noncecnt;
+	free_work(work);
+	return hash_count;
 }
-
-/*
-static void ztex_statline_before(char *buf, struct cgpu_info *cgpu)
-{
-	if (cgpu->deven == DEV_ENABLED) {
-		tailsprintf(buf, "%s-%d | ", cgpu->device_ztex->snString, cgpu->device_ztex->fpgaNum+1);
-		tailsprintf(buf, "%0.1fMHz | ", cgpu->device_ztex->freqM1 * (cgpu->device_ztex->freqM + 1));
-	}
-}
-*/
 
 static void ztex_statline_before(char *buf, size_t bufsiz, struct cgpu_info *cgpu)
 {
@@ -552,122 +480,13 @@ static void ztex_disable(struct thr_info *thr)
 
 static void ztex_identify(struct cgpu_info *cgpu)
 {
-//	struct ICARUS_INFO *info = (struct ICARUS_INFO *)(cgpu->device_data);
-
-//	if (info->ident == IDENT_CMR2)
-//		info->flash_next_work = true;
+	return;
 }
 
 static char *ztex_set(struct cgpu_info *cgpu, char *option, char *setting, char *replybuf)
 {
 	return NULL;
 }
-
-/*
-static char *ztex_set(struct cgpu_info *cgpu, char *option, char *setting, char *replybuf)
-{
-	struct libztex_device *ztex = cgpu->device_ztex;
-
-	applog(LOG_WARNING, "%s: Running Set...", cgpu->device_ztex->repr);
-
-	ztex_selectFpga(ztex);
-	if (libztex_configureFpga(ztex) != 0) {
-		libztex_resetFpga(ztex);
-		ztex_releaseFpga(ztex);
-		applog(LOG_ERR, "%s: Disabling!", cgpu->device_ztex->repr);
-		cgpu->deven = DEV_DISABLED;
-		sprintf(replybuf, "Ztex Set: Unable to select FPGA");
-		return replybuf;
-	}
-	
-	// KRAMBLE Handle options, based on get_options in driver-icarus.c
-	// Use as --ztex-clock freqM:freqMaxM
-	// Multiple comma separated vaues are allowed eg 160:180,180:184
-
-	{	// Bare block to isolate variables
-
-		char err_buf[BUFSIZ+1];
-		char buf[BUFSIZ+1];
-		char *ptr, *comma, *colon, *colon2;
-		size_t max;
-		int i, tmp;
-
-		int this_option_offset = ++option_offset;
-
-		if (strcasecmp(option, "help") == 0) {
-			sprintf(replybuf, "clock: range 50-250mhz");
-			return replybuf;
-		}
-		
-		if (opt_ztex_clock == NULL)
-				buf[0] = '\0';
-		else {
-			ptr = opt_ztex_clock;
-			for (i = 0; i < this_option_offset; i++) {
-				comma = strchr(ptr, ',');
-				if (comma == NULL)
-					break;
-				ptr = comma + 1;
-			}
-
-			comma = strchr(ptr, ',');
-			if (comma == NULL)
-				max = strlen(ptr);
-			else
-				max = comma - ptr;
-
-			if (max > BUFSIZ)
-				max = BUFSIZ;
-			strncpy(buf, ptr, max);
-			buf[max] = '\0';
-		}
-
-		if (*buf) {
-			colon = strchr(buf, ':');
-			if (colon)
-				*(colon++) = '\0';
-
-			if (*buf) {
-				tmp = atoi(buf);
-				if (tmp >= 50 && tmp <= 250)
-					ztex->freqM = ztex->freqMDefault = tmp/4 - 1;	// NB 4Mhz units
-				else {
-					sprintf(replybuf, "Invalid ztex-clock must be between 50 and 250");
-					return replybuf;
-				}
-			}
-
-			if (colon && *colon) {
-				tmp = atoi(colon);
-				if (tmp >= 50 && tmp <= 250) {
-					if (tmp/4 - 1 >= ztex->freqM)
-						ztex->freqMaxM = tmp/4 - 1;	// NB 4Mhz units
-					else
-					{
-						sprintf(replybuf, "Invalid ztex-clock max must be less than min");
-						return replybuf;
-					}
-				}
-				else {
-					sprintf(replybuf, "Invalid ztex-clock must be between 50 and 250");
-					return replybuf;
-				}
-			}
-		}
-	
-	}	// End bare block
-	
-	
-	ztex->freqM = ztex->freqMaxM+1;		// KRAMBLE is in original
-	// ztex_updateFreq(ztex);			// KRAMBLE Was already commented out in original
-
-	libztex_setFreq(ztex, ztex->freqMDefault);
-	ztex_releaseFpga(ztex);
-	applog(LOG_DEBUG, "%s: set", ztex->repr);
-
-	return NULL;
-}
-*/
 
 struct device_drv ztex_drv = {
 	.drv_id = DRIVER_ztex,
