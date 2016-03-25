@@ -100,7 +100,7 @@ extern void libztex_destroy_device (struct libztex_device* ztex);
 extern int libztex_configureFpga (struct libztex_device *dev);
 extern int libztex_setFreq (struct libztex_device *ztex, uint16_t freq);
 extern int libztex_sendHashData (struct libztex_device *ztex, unsigned char *sendbuf);
-extern int libztex_readHashData (struct libztex_device *ztex, struct libztex_hash_data nonces[]);
+extern int libztex_readHashData (struct libztex_device *ztex, struct libztex_hash_data *nonces);
 extern int libztex_resetFpga (struct libztex_device *ztex);
 extern int libztex_selectFpga(struct libztex_device *ztex);
 extern int libztex_numberOfFpgas(struct libztex_device *ztex);
