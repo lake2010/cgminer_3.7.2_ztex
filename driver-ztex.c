@@ -166,6 +166,7 @@ static int64_t ztex_scanwork(struct thr_info *thr)
 {
 	struct libztex_device *ztex;
 	struct libztex_hash_data hdata;
+	struct timeval tv_start, tv_end, diff;
 	unsigned char sendbuf[48];
 	int count, validNonces, errorCount;
 	int i, rc;
@@ -234,6 +235,7 @@ static int64_t ztex_scanwork(struct thr_info *thr)
 	validNonces = 0;
 	hash_count = 0;
 	errorCount = 0;
+	cgtime(&tv_start);
 
 	applog(LOG_DEBUG, "%s: entering poll loop", ztex->repr);
 	while (!(overflow || thr->work_restart)) {
@@ -324,6 +326,13 @@ static int64_t ztex_scanwork(struct thr_info *thr)
 			
 			applog(LOG_DEBUG, "%s: Submitted Nonce %08x", ztex->repr, golden_nonce2);
 			submit_nonce(thr, work, golden_nonce2);
+		}
+		
+		cgtime(&tv_end);
+		timersub(&tv_end, &tv_start, &diff);
+		if (diff.tv_sec > opt_scantime) {
+			applog(LOG_DEBUG, "%s: time = %d sec, scan-time = %d sec", ztex->repr, diff.tv_sec, opt_scantime);
+			break;
 		}
 	}
 
