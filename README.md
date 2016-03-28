@@ -11,7 +11,7 @@ These modifications will allow you to use the Decred cgminer v0.0.5 with a ztex-
 <li>copy .c and .h files to cgminer directory</li>
 <li>copy .bit to cgminer\bitstreams</li>
 <li>sudo make</li>
-<li>Command Line: cgminer --disable-gpu --blake256 -o < url:port > -u < username > -p < password > --ztex-clock 100:100</li>
+<li>sudo ./cgminer --disable-gpu --blake256 -o < url:port > -u < username > -p < password > --ztex-clock 100:100 --scan-time 6</li>
 </ul>
 Note: This miner only works on Getwork pools.  It does not have the Stratum logic incorporated yet.
 
