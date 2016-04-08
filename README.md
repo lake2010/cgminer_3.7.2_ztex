@@ -15,9 +15,8 @@ These modifications will allow you to use the Decred cgminer v0.0.5 with a ztex-
 </ul>
 Note: This miner only works on Getwork pools.  It does not have the Stratum logic incorporated yet.
 
-The following link is for a ztex-1.15y DCR bistream, it gets about 800Mh/s.
+Also, I have posted the link to a ztex-1.15y DCR bistream in this github, it gets about 800Mh/s.
 
-<ul>https://www.dropbox.com/s/j1d12ixhfthj0y7/ztex_ufm1_15y1.bit?dl=0</ul>
 ________________________________________________________________________________________________
 
 BTC: 14QcqFWZ9Y1j1aUHeUNySoMr4t9ZWJYt2a
