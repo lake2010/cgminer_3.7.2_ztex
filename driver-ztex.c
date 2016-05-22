@@ -167,7 +167,7 @@ static int64_t ztex_scanwork(struct thr_info *thr)
 	struct libztex_device *ztex;
 	struct libztex_hash_data hdata;
 	struct timeval tv_start, tv_end, diff;
-	unsigned char sendbuf[48];
+	unsigned char sendbuf[60];
 	int count, validNonces, errorCount;
 	int i, rc;
 	uint32_t nonce, hash_count;
@@ -186,29 +186,25 @@ static int64_t ztex_scanwork(struct thr_info *thr)
 	ztex = thr->cgpu->device_ztex;
 
 	// Copy And Swap The Remaining Block Data
-	memcpy(sendbuf,      work->data + 144, 4);
-	memcpy(sendbuf +  4, work->data + 136, 4);
-	memcpy(sendbuf +  8, work->data + 132, 4);
-	memcpy(sendbuf + 12, work->data + 128, 4);
+	memcpy(sendbuf,      work->data + 152, 4);
+	memcpy(sendbuf +  4, work->data + 148, 4);
+	memcpy(sendbuf +  8, work->data + 144, 4);
+	memcpy(sendbuf + 12, work->data + 140, 4);
+	memcpy(sendbuf + 16, work->data + 136, 4);
+	memcpy(sendbuf + 20, work->data + 132, 4);
+	memcpy(sendbuf + 24, work->data + 128, 4);
 
 	sb[0] = swab32(sb[0]);
 	sb[1] = swab32(sb[1]);
 	sb[2] = swab32(sb[2]);
 	sb[3] = swab32(sb[3]);
+	sb[4] = swab32(sb[4]);
+	sb[5] = swab32(sb[5]);
+	sb[6] = swab32(sb[6]);
 	
 	// Copy The Midstate
 	calc_midstate(work);
-	swap256(sendbuf + 16, work->midstate);
-
-	// Send Bytes To FPGA In Reverse Order
-	unsigned char swap[48];
-	for (i=0; i<48; i++) {
-		swap[i] = sendbuf[47 - i];
-	}
-
-//unsigned char* b = (unsigned char*)(swap);
-//applog(LOG_WARNING, "%s Swp: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", ztex->repr, b[0],b[1],b[2],b[3],b[4],b[5],b[6],b[7],b[8],b[9],b[10],b[11],b[12],b[13],b[14],b[15],b[16],b[17],b[18],b[19],b[20],b[21],b[22],b[23],b[24],b[25],b[26],b[27],b[28],b[29],b[30],b[31],b[32],b[33],b[34],b[35],b[36],b[37],b[38],b[39],b[40],b[41],b[42],b[43],b[44],b[45],b[46],b[47]);
-
+	swap256(sendbuf + 28, work->midstate);
 
 	// Send Work To FPGA
 	ztex_selectFpga(ztex);
@@ -307,6 +303,13 @@ static int64_t ztex_scanwork(struct thr_info *thr)
 		
 		if ((golden_nonce1 != 0) && (golden_nonce1 != last_golden1) && (golden_nonce1 != last_golden2)) {
 
+//			applog(LOG_DEBUG, "%s Check Golden Nonce1 - %08X, Prior1 - %08X, Prior2 - %08X", ztex->repr, golden_nonce1, last_golden1, last_golden2);
+
+//			if ( ztex_checkNonce(work, golden_nonce1) != 0) {
+//				applog(LOG_WARNING, "%s HW Error GN1: %08X HSH: %08X - N: %08X, H: %08X, E: %08X", ztex->repr, golden_nonce1, ztex_checkNonce(work, golden_nonce1), nonce, hdata.hash7, ztex_checkNonce(work, nonce));
+//				continue;
+//			}		
+		
 			last_golden2 = last_golden1;
 			last_golden1 = golden_nonce1;
 			
@@ -320,6 +323,13 @@ static int64_t ztex_scanwork(struct thr_info *thr)
 		golden_nonce2 = hdata.goldenNonce[1];
 
 		if ((golden_nonce2 != 0) && (golden_nonce2 != last_golden1) && (golden_nonce2 != last_golden2)) {
+
+//			applog(LOG_DEBUG, "%s Check Golden Nonce2 - %08X, Prior1 - %08X, Prior2 - %08X", ztex->repr, golden_nonce2, last_golden1, last_golden1);
+
+//			if ( ztex_checkNonce(work, golden_nonce2) != 0) {
+//				applog(LOG_WARNING, "%s HW Error GN2: %08X HSH: %08X - N: %08X, H: %08X, E: %08X", ztex->repr, golden_nonce2, ztex_checkNonce(work, golden_nonce2), nonce, hdata.hash7, ztex_checkNonce(work, nonce));
+//				continue;
+//			}		
 
 			last_golden2 = last_golden1;
 			last_golden1 = golden_nonce2;
