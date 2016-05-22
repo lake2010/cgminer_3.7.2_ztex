@@ -1,6 +1,6 @@
 # cgminer 3.7.2 DCR Mods For ZTEX-1.15y FPGA
 
-These modifications will allow you to use the Decred cgminer v0.0.5 with a ztex-1.15y fpga.  Also, support has been added for simple serial FPGA boards such as the BeMicroCVA9 ( or any other single chip FPGA using serial comms ).
+These modifications will allow you to use the Decred cgminer v0.0.5 with a ztex-1.15y fpga (currently gets about 1GH/s).  Also, support has been added for simple serial FPGA boards such as the BeMicroCVA9 ( or any other single chip FPGA using serial comms ).
 
 Below are the steps I used to get the miner running on my Raspberry Pi.
 <ul>
@@ -24,8 +24,6 @@ To run the Miner (Serial FPGA)
     sudo ./cgminer --disable-gpu --blake256 -o < url:port > -u < username > -p < password > -S /dev/ttyUSB0 --scan-time 6 --queue 4
     
 Note: This miner only works on Getwork pools.  It does not have the Stratum logic incorporated yet.
-
-Also, I have posted the link to a ztex-1.15y DCR bistream in this github, it gets about 1Gh/s.
 
 ________________________________________________________________________________________________
 
