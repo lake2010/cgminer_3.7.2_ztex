@@ -1,8 +1,6 @@
 #ifndef __MINER_H__
 #define __MINER_H__
 
-#define USE_ZTEX 1
-
 #include "config.h"
 
 #include <stdbool.h>
@@ -239,9 +237,10 @@ static inline int fsync (int fd)
  * update all macros in the code that use the *_PARSE_COMMANDS macros for each
  * listed driver. */
 #define FPGA_PARSE_COMMANDS(DRIVER_ADD_COMMAND) \
+	DRIVER_ADD_COMMAND(serial_fpga) \
+	DRIVER_ADD_COMMAND(ztex) \
 	DRIVER_ADD_COMMAND(bitforce) \
 	DRIVER_ADD_COMMAND(icarus) \
-	DRIVER_ADD_COMMAND(ztex) \
 	DRIVER_ADD_COMMAND(modminer)
 
 #define ASIC_PARSE_COMMANDS(DRIVER_ADD_COMMAND) \
