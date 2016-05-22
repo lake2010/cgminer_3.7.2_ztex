@@ -16,10 +16,13 @@ Below are the steps I used to get the miner running on my Raspberry Pi.
 </ul>
 
 To run the Miner (ZTEX)
+
     sudo ./cgminer --disable-gpu --blake256 -o < url:port > -u < username > -p < password > --ztex-clock 116:116 --scan-time 6 --queue 4
 
 To run the Miner (Serial FPGA)
+
     sudo ./cgminer --disable-gpu --blake256 -o < url:port > -u < username > -p < password > -S /dev/ttyUSB0 --scan-time 6 --queue 4
+    
 Note: This miner only works on Getwork pools.  It does not have the Stratum logic incorporated yet.
 
 Also, I have posted the link to a ztex-1.15y DCR bistream in this github, it gets about 1Gh/s.
