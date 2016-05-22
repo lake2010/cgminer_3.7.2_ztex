@@ -9,7 +9,11 @@
  * any later version.  See COPYING for more details.
  */
 
-#define USE_ZTEX 1
+
+#define USE_ZTEX
+#define USE_FPGA
+#define USE_FPGA_SERIAL
+#undef USE_ICARUS
 
 #include "config.h"
 
@@ -70,19 +74,25 @@ char *curly = ":D";
 #include "usbutils.h"
 #endif
 
+
+#ifdef USE_FPGA
+#include "fpgautils.c"
+#endif
+
+#ifdef USE_ZTEX
+#include "libztex.c"
+#include "driver-ztex.c"
+#endif
+
+#ifdef USE_FPGA_SERIAL
+#include "driver-serialfpga.c"
+#endif
+
+
 #if defined(unix) || defined(__APPLE__)
 	#include <errno.h>
 	#include <fcntl.h>
 	#include <sys/wait.h>
-#endif
-
-#ifdef USE_ZTEX
-#define USE_FPGA
-#define USE_FPGA_SERIAL
-#include "libztex.c"
-#include "driver-ztex.c"
-#include "fpgautils.c"
-uint32_t extra_data = 0x00000000;
 #endif
 
 #ifdef USE_AVALON
@@ -97,9 +107,6 @@ uint32_t extra_data = 0x00000000;
 #include "driver-hashfast.h"
 #endif
 
-#if defined(USE_BITFORCE) || defined(USE_ICARUS) || defined(USE_AVALON) || defined(USE_MODMINER)
-#	define USE_FPGA
-#endif
 
 /* Secure random generation to create unique nonces on 
  * both Windows and Linux 
@@ -2902,7 +2909,10 @@ static void show_hash(struct work *work, char *hashshow)
 	char diffdisp[16];
 	unsigned long h32;
 	uint32_t *hash32;
+	uint32_t *data32;
 	int intdiff, ofs;
+
+	data32 = (uint32_t *)work->data;
 
 	swab256(rhash, work->hash);
 	for (ofs = 0; ofs <= 28; ofs ++) {
@@ -2913,8 +2923,10 @@ static void show_hash(struct work *work, char *hashshow)
 	h32 = be32toh(*hash32);
 	intdiff = round(work->work_difficulty);
 	suffix_string(work->share_diff, diffdisp, sizeof (diffdisp), 0);
-	snprintf(hashshow, 64, "%08lx Diff %s/%d%s", h32, diffdisp, intdiff,
-		 work->block? " BLOCK!" : "");
+        snprintf(hashshow, 64, "%08X Diff %s/%d%s", data32[35], diffdisp, intdiff,
+                 work->block? " BLOCK!" : "");
+//	snprintf(hashshow, 64, "%08lx Diff %s/%d%s", h32, diffdisp, intdiff,
+//		 work->block? " BLOCK!" : "");
 }
 
 #ifdef HAVE_LIBCURL
@@ -6358,22 +6370,14 @@ struct work *get_work(struct thr_info *thr, const int thr_id)
 	mutex_unlock(&xor_prng_lock);
 	applog(LOG_DEBUG, "Assigning unique work ID %x, %x", (uint32_t)(r_uint64 >> 32), (uint32_t)r_uint64);
 
-#ifdef USE_ZTEX
-
-	//Test Data
+	//Test Data For ZTEX / Serial FPGAs
 	//Hash: 0000000000219dcdba6306f9a8711cd4052ffa7735325c9d96a6918ab70767ae
 	//Nonce: 0x96a07255
 	//unsigned char block_header[] = { 0x00, 0x00, 0x00, 0x00, 0xb1, 0x97, 0xbc, 0xb8, 0xef, 0x5b, 0xb0, 0xfe, 0x61, 0x0a, 0x56, 0xa2, 0xfb, 0x07, 0x96, 0xf2, 0xab, 0x4e, 0x5a, 0x44, 0x9c, 0x95, 0x65, 0xd2, 0xbb, 0x04, 0x58, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0xbb, 0x38, 0x9f, 0x0b, 0x2f, 0xeb, 0x15, 0xb6, 0x6e, 0x25, 0xe4, 0xbd, 0x79, 0xe7, 0xee, 0xd9, 0xcd, 0x9b, 0xcb, 0xa5, 0x80, 0x4e, 0xc4, 0xfd, 0x8a, 0xa7, 0x85, 0x1b, 0x70, 0x84, 0x2d, 0x06, 0x82, 0x49, 0xce, 0x9f, 0x0c, 0x3e, 0x9f, 0x39, 0x23, 0x90, 0x5e, 0x4b, 0x74, 0x6d, 0x9d, 0x75, 0x30, 0xcf, 0xf8, 0xaf, 0x75, 0x7c, 0x8d, 0x63, 0xdd, 0x23, 0xbf, 0x16, 0x83, 0x25, 0x69, 0x00, 0x00, 0xb6, 0x05, 0x77, 0x86, 0x94, 0x89, 0x04, 0x00, 0x00, 0x00, 0xef, 0x1d, 0x00, 0x00, 0x5b, 0x9f, 0x00, 0x1c, 0x7f, 0x33, 0xc9, 0x60, 0x04, 0x00, 0x00, 0x00, 0x91, 0x07, 0x00, 0x00, 0xd1, 0x06, 0x00, 0x00, 0x89, 0x3c, 0xaa, 0x56, 0x96, 0xa0, 0x72, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 	//memcpy(work->data, block_header, 180);
-
-	data_cast_as_32[36] = (uint32_t)r_uint64;
-
-#else
 	
 	data_cast_as_32[36] = (uint32_t)(r_uint64 >> 32);
 	data_cast_as_32[37] = (uint32_t)r_uint64;
-
-#endif	
 	
 	work->thr_id = thr_id;
 	thread_reportin(thr);
@@ -6392,11 +6396,11 @@ static void submit_work_async(struct work *work)
 
 	if (stale_work(work, true)) {
 		if (opt_submit_stale)
-			applog(LOG_NOTICE, "Pool %d stale share detected, submitting as user requested", pool->pool_no);
+			applog(LOG_NOTICE, "Pool %d stale share detected, submitting...", pool->pool_no);
 		else if (pool->submit_old)
-			applog(LOG_NOTICE, "Pool %d stale share detected, submitting as pool requested", pool->pool_no);
+			applog(LOG_NOTICE, "Pool %d stale share detected, submitting...", pool->pool_no);
 		else {
-			applog(LOG_NOTICE, "Pool %d stale share detected, discarding", pool->pool_no);
+			applog(LOG_NOTICE, "Pool %d stale share detected, discarding...", pool->pool_no);
 			sharelog("discard", work);
 
 			mutex_lock(&stats_lock);
@@ -6641,8 +6645,8 @@ static void hash_sole_work(struct thr_info *mythr)
 			data_cast_as_32 = (uint32_t*) work->data;
 
 			/* Occasionally update the extra nonce */
-//			if (!(counter & 0x00FF)) {
-//				data_cast_as_32[38]++;
+			if (!(counter & 0x00FF)) {
+				data_cast_as_32[38]++;
 				
 				cgtime(&tv_workstart);
 				work->blk.nonce = 0;
@@ -6655,8 +6659,8 @@ static void hash_sole_work(struct thr_info *mythr)
 				
 				applog(LOG_DEBUG, "Do sole work scanhash for merkle root %x, extra_nonce %x %x %x %x (counter %d)", 
                     data_cast_as_32[9], data_cast_as_32[36], data_cast_as_32[37], data_cast_as_32[38], data_cast_as_32[39], counter);
-//			}
-//			counter++;
+			}
+			counter++;
 			
 			work->device_diff = MIN(drv->working_diff, work->work_difficulty);
 				cgtime(&tv_start);
