@@ -829,7 +829,7 @@ done:
 int libztex_sendHashData(struct libztex_device *ztex, unsigned char *sendbuf)
 {
 	int cnt = 0;
-	int ret = 48;	// Set This To Number Of Bytes To Be Sent To FPGA
+	int ret = 60;	// Set This To Number Of Bytes To Be Sent To FPGA
 	int len = 0;
 
 	if (ztex == NULL || ztex->hndl == NULL)
